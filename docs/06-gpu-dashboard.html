@@ -44,8 +44,6 @@
 
     <div class="toolbar">
       <button class="btn" onclick="loadAll()">새로고침</button>
-      <div class="pill">자동 새로고침: 0.1초</div>
-      <div class="pill">API: <span id="apiBase"></span></div>
     </div>
 
     <p id="status" class="status">로딩 대기...</p>
@@ -55,7 +53,6 @@
 <script>
 const API_BASE = localStorage.getItem('gpu_api_base') || 'https://office-most-cartridge-broker.trycloudflare.com';
 const NODES = ['iREMB-C-03', 'iREMB-C-07'];
-document.getElementById('apiBase').textContent = API_BASE;
 
 function usageClass(v){ if(v>=90) return 'bad'; if(v>=60) return 'warn'; return 'ok'; }
 
