@@ -5,7 +5,7 @@ import subprocess, shlex, threading, time
 from collections import defaultdict, deque
 
 DEFAULT_NODES = ["iREMB-C-03", "iREMB-C-07"]
-SAMPLE_SEC = 1.0
+SAMPLE_SEC = 5.0
 WINDOW_SEC = 60
 MAX_POINTS = int(WINDOW_SEC / SAMPLE_SEC)
 

@@ -27,5 +27,5 @@ function renderNode(node,data){
   return `<div class="card"><div class="node"><h3>${node}</h3><div class="updated">${new Date().toLocaleTimeString()}</div></div>${rows||'<div class="meta">데이터 없음</div>'}</div>`;
 }
 async function loadAll(){ const cards=document.getElementById('cards'); try{ const results=await Promise.all(NODES.map(n=>fetchNode(n).then(d=>({n,d})).catch(e=>({n,err:e.message})))); cards.innerHTML=results.map(x=>x.err?`<div class="card"><div class="node"><h3>${x.n}</h3></div><div class="bad">오류: ${x.err}</div></div>`:renderNode(x.n,x.d)).join(''); }catch(e){} }
-loadAll(); setInterval(loadAll,100);
+loadAll(); setInterval(loadAll,5000);
 </script></body></html>
