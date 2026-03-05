@@ -18,6 +18,12 @@
 <script>
 const API_BASE = localStorage.getItem('gpu_api_base') || 'https://office-most-cartridge-broker.trycloudflare.com';
 const NODES = ['iREMB-C-03','iREMB-C-07'];
+const UI_TICK_MS = 500;      // 화면 갱신 tick
+const API_COOLDOWN_MS = 5000; // API 최소 호출 간격
+let lastFetchAt = 0;
+let fetchInFlight = false;
+let cacheResults = [];
+
 function usageClass(v){ if(v>=90) return 'bad'; if(v>=60) return 'warn'; return 'ok'; }
 function sparkPath(values,w=300,h=42){ if(!values.length) return ''; const maxX=values.length-1||1; return values.map((v,i)=>{const x=(i/maxX)*w; const y=h-(Math.max(0,Math.min(100,v))/100)*h; return `${i===0?'M':'L'}${x.toFixed(2)},${y.toFixed(2)}`;}).join(' '); }
 async function fetchNode(node){ const r=await fetch(`${API_BASE}/history?node=${encodeURIComponent(node)}`); if(!r.ok) throw new Error(`${node}: ${r.status}`); return await r.json(); }
@@ -26,6 +32,34 @@ function renderNode(node,data){
     return `<div class="gpu"><div class="topline"><div class="gname">GPU ${g.index} · ${g.name||'unknown'}</div><div class="util ${usageClass(util)}">${util}%</div></div><div class="spark-wrap"><svg class="spark" viewBox="0 0 300 42" preserveAspectRatio="none"><path d="${d}"></path></svg></div><div class="meta">메모리 ${memUsed} / ${memTotal} MiB</div></div>`; }).join('');
   return `<div class="card"><div class="node"><h3>${node}</h3><div class="updated">${new Date().toLocaleTimeString()}</div></div>${rows||'<div class="meta">데이터 없음</div>'}</div>`;
 }
-async function loadAll(){ const cards=document.getElementById('cards'); try{ const results=await Promise.all(NODES.map(n=>fetchNode(n).then(d=>({n,d})).catch(e=>({n,err:e.message})))); cards.innerHTML=results.map(x=>x.err?`<div class="card"><div class="node"><h3>${x.n}</h3></div><div class="bad">오류: ${x.err}</div></div>`:renderNode(x.n,x.d)).join(''); }catch(e){} }
-loadAll(); setInterval(loadAll,5000);
+function renderFromCache(){
+  const cards=document.getElementById('cards');
+  if(!cacheResults.length) return;
+  cards.innerHTML=cacheResults.map(x=>x.err
+    ? `<div class="card"><div class="node"><h3>${x.n}</h3></div><div class="bad">오류: ${x.err}</div></div>`
+    : renderNode(x.n,x.d)
+  ).join('');
+}
+
+async function maybeFetch(){
+  const now = Date.now();
+  if(fetchInFlight) return;
+  if(now - lastFetchAt < API_COOLDOWN_MS) return;
+  fetchInFlight = true;
+  try{
+    const results=await Promise.all(NODES.map(n=>fetchNode(n).then(d=>({n,d})).catch(e=>({n,err:e.message}))));
+    cacheResults = results;
+    lastFetchAt = Date.now();
+  } finally {
+    fetchInFlight = false;
+  }
+}
+
+async function tick(){
+  await maybeFetch();
+  renderFromCache();
+}
+
+tick();
+setInterval(tick, UI_TICK_MS);
 </script></body></html>
