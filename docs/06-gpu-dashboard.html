@@ -6,58 +6,49 @@
   <title>iREMB GPU Dashboard</title>
   <style>
     :root{
-      --bg:#070b16; --panel:#111a31cc; --line:#2a3c6a; --text:#eaf0ff; --muted:#9fb2dd;
-      --ok:#63e6be; --warn:#ffd166; --bad:#ff6b6b; --accent:#6ea8ff;
+      --bg:#f6f8fb; --card:#ffffff; --text:#191f28; --muted:#8b95a1;
+      --line:#eef1f4; --blue:#3182f6; --ok:#16b364; --warn:#f79009; --bad:#f04438;
     }
     *{box-sizing:border-box}
-    body{
-      margin:0; min-height:100vh; color:var(--text);
-      font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-      background:radial-gradient(1200px 700px at 20% -10%, #1a2d58 0%, transparent 60%), var(--bg);
-      padding:20px;
-    }
-    .wrap{max-width:1200px;margin:0 auto}
-    .top{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
-    h1{margin:0;font-size:28px;letter-spacing:.2px}
-    .muted{color:var(--muted)}
-    .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
-    button{
-      background:linear-gradient(180deg,#4a86ff,#2f5dff);color:white;border:0;border-radius:10px;
-      padding:9px 13px;font-weight:600;cursor:pointer;box-shadow:0 6px 20px #2447a766;
-    }
-    code{background:#1a2648;border:1px solid #324a82;padding:2px 8px;border-radius:7px;color:#cfe0ff}
-    .status{margin:14px 0}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:"Pretendard",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+    .wrap{max-width:1100px;margin:0 auto;padding:24px 16px 40px}
+    .header{margin-bottom:16px}
+    h1{margin:0;font-size:30px;font-weight:800;letter-spacing:-0.3px}
+    .sub{margin-top:6px;color:var(--muted);font-size:14px}
+    .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0 18px}
+    .btn{border:0;background:var(--blue);color:#fff;padding:10px 14px;border-radius:12px;font-weight:700;cursor:pointer}
+    .pill{background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-size:13px;color:#4e5968}
     .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
-    .card{
-      background:var(--panel);backdrop-filter: blur(8px);
-      border:1px solid var(--line); border-radius:14px; padding:14px;
-      box-shadow:0 8px 28px #00000033;
-    }
-    .card h3{margin:0 0 6px;font-size:18px}
-    .gpu{padding:10px 0;border-top:1px solid #2b3a62}
-    .title{display:flex;justify-content:space-between;gap:10px;align-items:center}
-    .badge{font-size:12px;padding:3px 8px;border-radius:999px;border:1px solid #38518e;color:#c7d8ff}
-    .bar{height:8px;background:#172447;border:1px solid #2f467f;border-radius:999px;overflow:hidden;margin-top:6px}
-    .fill{height:100%;background:linear-gradient(90deg,#39d98a,#f7c948,#ff6b6b)}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:0 6px 24px rgba(17,24,39,0.05)}
+    .node{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+    .node h3{margin:0;font-size:20px}
+    .updated{color:var(--muted);font-size:12px}
+    .gpu{padding:12px 0;border-top:1px solid var(--line)}
+    .gpu:first-of-type{border-top:0}
+    .topline{display:flex;justify-content:space-between;align-items:center;gap:10px}
+    .gname{font-size:14px;font-weight:700;color:#333d4b}
+    .util{font-weight:800}
     .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+    .bar{margin-top:8px;height:10px;border-radius:999px;background:#eef3fb;overflow:hidden}
+    .fill{height:100%;background:linear-gradient(90deg,#60a5fa,#3182f6)}
+    .meta{margin-top:6px;color:#6b7684;font-size:13px}
+    .status{margin:0 0 12px;color:#6b7684;font-size:13px}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="top">
-      <div>
-        <h1>iREMB GPU Dashboard</h1>
-        <div class="muted">노드 2개(iREMB-C-03, iREMB-C-07) 실시간 모니터링</div>
-      </div>
-      <div class="badge">Auto refresh: 0.1s</div>
+    <div class="header">
+      <h1>GPU 모니터링</h1>
+      <div class="sub">iREMB-C-03 / iREMB-C-07 실시간 상태</div>
     </div>
 
     <div class="toolbar">
-      <button onclick="loadAll()">새로고침</button>
-      <div class="muted">API Base: <code id="apiBase"></code></div>
+      <button class="btn" onclick="loadAll()">새로고침</button>
+      <div class="pill">자동 새로고침: 0.1초</div>
+      <div class="pill">API: <span id="apiBase"></span></div>
     </div>
 
-    <div id="status" class="status muted">로딩 대기...</div>
+    <p id="status" class="status">로딩 대기...</p>
     <div class="grid" id="cards"></div>
   </div>
 
@@ -74,20 +65,24 @@ async function fetchNode(node){
   return await r.json();
 }
 
-function renderNode(node,data){
-  const list = (data.gpus||[]).map(g=>{
+function renderNode(node, data){
+  const rows = (data.gpus||[]).map(g=>{
     const util = Number(g.util||0);
     return `
       <div class="gpu">
-        <div class="title">
-          <div><b>GPU ${g.index}</b> - ${g.name||'unknown'}</div>
-          <div class="${usageClass(util)}"><b>${util}%</b></div>
+        <div class="topline">
+          <div class="gname">GPU ${g.index} · ${g.name||'unknown'}</div>
+          <div class="util ${usageClass(util)}">${util}%</div>
         </div>
         <div class="bar"><div class="fill" style="width:${Math.max(0,Math.min(100,util))}%"></div></div>
-        <div class="muted">Memory: ${g.mem_used||0} / ${g.mem_total||0} MiB</div>
+        <div class="meta">메모리 ${g.mem_used||0} / ${g.mem_total||0} MiB</div>
       </div>`;
   }).join('');
-  return `<div class="card"><h3>${node}</h3><div class="muted">updated: ${new Date().toLocaleTimeString()}</div>${list||'<div class="muted">GPU 정보 없음</div>'}</div>`;
+
+  return `<div class="card">
+    <div class="node"><h3>${node}</h3><div class="updated">${new Date().toLocaleTimeString()}</div></div>
+    ${rows || '<div class="meta">GPU 정보 없음</div>'}
+  </div>`;
 }
 
 async function loadAll(){
@@ -97,7 +92,7 @@ async function loadAll(){
   try{
     const results = await Promise.all(NODES.map(n=>fetchNode(n).then(d=>({n,d})).catch(e=>({n,err:e.message}))));
     cards.innerHTML = results.map(x=> x.err
-      ? `<div class="card"><h3>${x.n}</h3><div class="bad">오류: ${x.err}</div></div>`
+      ? `<div class="card"><div class="node"><h3>${x.n}</h3></div><div class="bad">오류: ${x.err}</div></div>`
       : renderNode(x.n,x.d)
     ).join('');
     status.textContent='완료';
