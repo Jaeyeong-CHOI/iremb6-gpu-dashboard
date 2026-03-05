@@ -5,21 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>iREMB GPU Dashboard</title>
   <style>
-    :root{
-      --bg:#f6f8fb; --card:#ffffff; --text:#191f28; --muted:#8b95a1;
-      --line:#eef1f4; --blue:#3182f6; --ok:#16b364; --warn:#f79009; --bad:#f04438;
-    }
+    :root{--bg:#f6f8fb;--card:#fff;--text:#191f28;--muted:#8b95a1;--line:#eef1f4;--blue:#3182f6;--ok:#16b364;--warn:#f79009;--bad:#f04438}
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--text);font-family:"Pretendard",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
     .wrap{max-width:1100px;margin:0 auto;padding:24px 16px 40px}
-    .header{margin-bottom:16px}
     h1{margin:0;font-size:30px;font-weight:800;letter-spacing:-0.3px}
     .sub{margin-top:6px;color:var(--muted);font-size:14px}
-    .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0 18px}
+    .toolbar{display:flex;gap:10px;align-items:center;margin:14px 0 18px}
     .btn{border:0;background:var(--blue);color:#fff;padding:10px 14px;border-radius:12px;font-weight:700;cursor:pointer}
-    .pill{background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-size:13px;color:#4e5968}
     .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
-    .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:0 6px 24px rgba(17,24,39,0.05)}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:0 6px 24px rgba(17,24,39,.05)}
     .node{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
     .node h3{margin:0;font-size:20px}
     .updated{color:var(--muted);font-size:12px}
@@ -32,29 +27,45 @@
     .bar{margin-top:8px;height:10px;border-radius:999px;background:#eef3fb;overflow:hidden}
     .fill{height:100%;background:linear-gradient(90deg,#60a5fa,#3182f6)}
     .meta{margin-top:6px;color:#6b7684;font-size:13px}
-    .status{margin:0 0 12px;color:#6b7684;font-size:13px}
+    .spark-wrap{margin-top:8px;background:#f8fbff;border:1px solid #e8eff9;border-radius:10px;padding:6px}
+    .spark{width:100%;height:42px;display:block}
+    .spark path{stroke:#3182f6;stroke-width:2;fill:none}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="header">
-      <h1>GPU 모니터링</h1>
-      <div class="sub">iREMB-C-03 / iREMB-C-07 실시간 상태</div>
-    </div>
-
-    <div class="toolbar">
-      <button class="btn" onclick="loadAll()">새로고침</button>
-    </div>
-
-    <p id="status" class="status">로딩 대기...</p>
+    <h1>GPU 모니터링</h1>
+    <div class="sub">iREMB-C-03 / iREMB-C-07 실시간 상태</div>
+    <div class="toolbar"><button class="btn" onclick="loadAll()">새로고침</button></div>
     <div class="grid" id="cards"></div>
   </div>
 
 <script>
 const API_BASE = localStorage.getItem('gpu_api_base') || 'https://office-most-cartridge-broker.trycloudflare.com';
 const NODES = ['iREMB-C-03', 'iREMB-C-07'];
+const HISTORY = {}; // key: node-gpuIndex => [util,...]
+const MAX_POINTS = 40;
 
 function usageClass(v){ if(v>=90) return 'bad'; if(v>=60) return 'warn'; return 'ok'; }
+function keyOf(node, idx){ return `${node}-${idx}`; }
+
+function pushHistory(node, idx, util){
+  const k = keyOf(node, idx);
+  if(!HISTORY[k]) HISTORY[k] = [];
+  HISTORY[k].push(Number(util)||0);
+  if(HISTORY[k].length > MAX_POINTS) HISTORY[k].shift();
+  return HISTORY[k];
+}
+
+function sparkPath(values, w=300, h=42){
+  if(!values.length) return '';
+  const maxX = values.length - 1 || 1;
+  return values.map((v,i)=>{
+    const x = (i / maxX) * w;
+    const y = h - (Math.max(0, Math.min(100, v)) / 100) * h;
+    return `${i===0?'M':'L'}${x.toFixed(2)},${y.toFixed(2)}`;
+  }).join(' ');
+}
 
 async function fetchNode(node){
   const r = await fetch(`${API_BASE}/metrics?node=${encodeURIComponent(node)}`);
@@ -65,6 +76,8 @@ async function fetchNode(node){
 function renderNode(node, data){
   const rows = (data.gpus||[]).map(g=>{
     const util = Number(g.util||0);
+    const hist = pushHistory(node, g.index, util);
+    const d = sparkPath(hist);
     return `
       <div class="gpu">
         <div class="topline">
@@ -72,6 +85,11 @@ function renderNode(node, data){
           <div class="util ${usageClass(util)}">${util}%</div>
         </div>
         <div class="bar"><div class="fill" style="width:${Math.max(0,Math.min(100,util))}%"></div></div>
+        <div class="spark-wrap">
+          <svg class="spark" viewBox="0 0 300 42" preserveAspectRatio="none">
+            <path d="${d}"></path>
+          </svg>
+        </div>
         <div class="meta">메모리 ${g.mem_used||0} / ${g.mem_total||0} MiB</div>
       </div>`;
   }).join('');
@@ -83,18 +101,15 @@ function renderNode(node, data){
 }
 
 async function loadAll(){
-  const status = document.getElementById('status');
   const cards = document.getElementById('cards');
-  status.textContent='불러오는 중...';
   try{
     const results = await Promise.all(NODES.map(n=>fetchNode(n).then(d=>({n,d})).catch(e=>({n,err:e.message}))));
     cards.innerHTML = results.map(x=> x.err
       ? `<div class="card"><div class="node"><h3>${x.n}</h3></div><div class="bad">오류: ${x.err}</div></div>`
       : renderNode(x.n,x.d)
     ).join('');
-    status.textContent='완료';
   }catch(e){
-    status.textContent='실패: '+e.message;
+    // no status text per request
   }
 }
 
