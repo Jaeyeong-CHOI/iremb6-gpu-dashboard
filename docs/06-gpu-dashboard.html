@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>iREMB GPU Dashboard</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0b1020;color:#e9eefc;margin:0;padding:20px}
+    h1{margin:0 0 8px} .muted{color:#9fb0d7}
+    .row{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0}
+    .card{background:#141b33;border:1px solid #273156;border-radius:12px;padding:14px;min-width:280px;flex:1}
+    .gpu{padding:8px 0;border-top:1px solid #273156}
+    .ok{color:#7ce38b}.warn{color:#ffd166}.bad{color:#ff6b6b}
+    button{background:#2f5dff;color:#fff;border:0;border-radius:8px;padding:8px 12px;cursor:pointer}
+    code{background:#1a2240;padding:2px 6px;border-radius:6px}
+  </style>
+</head>
+<body>
+  <h1>iREMB GPU Dashboard</h1>
+  <div class="muted">노드 2개(iREMB-C-03, iREMB-C-07) 상태를 표시합니다.</div>
+  <div class="row">
+    <button onclick="loadAll()">새로고침</button>
+    <div class="muted">API Base: <code id="apiBase"></code></div>
+  </div>
+  <div id="status" class="muted">로딩 대기...</div>
+  <div class="row" id="cards"></div>
+
+<script>
+const API_BASE = localStorage.getItem('gpu_api_base') || 'http://127.0.0.1:8088';
+const NODES = ['iREMB-C-03', 'iREMB-C-07'];
+document.getElementById('apiBase').textContent = API_BASE;
+
+function usageClass(v){ if(v>=90) return 'bad'; if(v>=60) return 'warn'; return 'ok'; }
+
+async function fetchNode(node){
+  const r = await fetch(`${API_BASE}/metrics?node=${encodeURIComponent(node)}`);
+  if(!r.ok) throw new Error(`${node}: ${r.status}`);
+  return await r.json();
+}
+
+function renderNode(node,data){
+  const list = (data.gpus||[]).map(g=>`
+    <div class="gpu">
+      <div><b>GPU ${g.index}</b> - ${g.name||'unknown'}</div>
+      <div class="${usageClass(Number(g.util||0))}">Util: ${g.util||0}%</div>
+      <div>Mem: ${g.mem_used||0} / ${g.mem_total||0} MiB</div>
+    </div>`).join('');
+  return `<div class="card"><h3>${node}</h3><div class="muted">updated: ${new Date().toLocaleTimeString()}</div>${list||'<div class="muted">GPU 정보 없음</div>'}</div>`;
+}
+
+async function loadAll(){
+  const status = document.getElementById('status');
+  const cards = document.getElementById('cards');
+  status.textContent='불러오는 중...';
+  try{
+    const results = await Promise.all(NODES.map(n=>fetchNode(n).then(d=>({n,d})).catch(e=>({n,err:e.message}))));
+    cards.innerHTML = results.map(x=> x.err
+      ? `<div class="card"><h3>${x.n}</h3><div class="bad">오류: ${x.err}</div></div>`
+      : renderNode(x.n,x.d)
+    ).join('');
+    status.textContent='완료';
+  }catch(e){
+    status.textContent='실패: '+e.message;
+  }
+}
+
+loadAll();
+setInterval(loadAll, 10000);
+</script>
+</body>
+</html>
