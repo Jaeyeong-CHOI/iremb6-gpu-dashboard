@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-import subprocess
-import shlex
+import subprocess, shlex, threading, time
+from collections import defaultdict, deque
 
 DEFAULT_NODES = ["iREMB-C-03", "iREMB-C-07"]
+SAMPLE_SEC = 1.0
+WINDOW_SEC = 60
+MAX_POINTS = int(WINDOW_SEC / SAMPLE_SEC)
 
 app = FastAPI(title="iREMB GPU API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# HISTORY[node][gpu_index] = deque([{ts, util, mem_used, mem_total, name}], maxlen=60)
+HISTORY = defaultdict(lambda: defaultdict(lambda: deque(maxlen=MAX_POINTS)))
+LOCK = threading.Lock()
 
 
 def run(cmd: str, timeout: int = 8) -> str:
@@ -26,21 +33,46 @@ def collect_node(node: str) -> dict:
     for line in out.splitlines():
         parts = [x.strip() for x in line.split(',')]
         if len(parts) >= 5:
-            gpus.append(
-                {
-                    "index": int(parts[0]),
-                    "name": parts[1],
-                    "util": int(parts[2]),
-                    "mem_used": int(parts[3]),
-                    "mem_total": int(parts[4]),
-                }
-            )
+            gpus.append({
+                "index": int(parts[0]),
+                "name": parts[1],
+                "util": int(parts[2]),
+                "mem_used": int(parts[3]),
+                "mem_total": int(parts[4]),
+            })
     return {"node": node, "gpus": gpus}
+
+
+def sampler_loop():
+    while True:
+        now = int(time.time())
+        for node in DEFAULT_NODES:
+            try:
+                data = collect_node(node)
+                with LOCK:
+                    for g in data.get("gpus", []):
+                        HISTORY[node][g["index"]].append({
+                            "ts": now,
+                            "util": g["util"],
+                            "mem_used": g["mem_used"],
+                            "mem_total": g["mem_total"],
+                            "name": g["name"],
+                        })
+            except Exception:
+                # Keep running even if one node temporarily fails.
+                pass
+        time.sleep(SAMPLE_SEC)
+
+
+@app.on_event("startup")
+def startup_event():
+    t = threading.Thread(target=sampler_loop, daemon=True)
+    t.start()
 
 
 @app.get("/health")
 def health():
-    return {"ok": True, "nodes": DEFAULT_NODES}
+    return {"ok": True, "nodes": DEFAULT_NODES, "sample_sec": SAMPLE_SEC, "window_sec": WINDOW_SEC}
 
 
 @app.get("/metrics")
@@ -60,6 +92,29 @@ def metrics_all():
         except Exception as e:
             out.append({"node": n, "error": str(e), "gpus": []})
     return {"nodes": out}
+
+
+@app.get("/history")
+def history(node: str = Query(...)):
+    with LOCK:
+        node_data = HISTORY.get(node, {})
+        gpus = []
+        for gpu_index, dq in node_data.items():
+            points = list(dq)
+            if not points:
+                continue
+            latest = points[-1]
+            gpus.append({
+                "index": gpu_index,
+                "name": latest.get("name", "unknown"),
+                "latest": {
+                    "util": latest.get("util", 0),
+                    "mem_used": latest.get("mem_used", 0),
+                    "mem_total": latest.get("mem_total", 0),
+                },
+                "points": points,
+            })
+    return {"node": node, "window_sec": WINDOW_SEC, "sample_sec": SAMPLE_SEC, "gpus": gpus}
 
 
 if __name__ == "__main__":
