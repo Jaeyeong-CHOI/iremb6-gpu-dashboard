@@ -5,25 +5,61 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>iREMB GPU Dashboard</title>
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0b1020;color:#e9eefc;margin:0;padding:20px}
-    h1{margin:0 0 8px} .muted{color:#9fb0d7}
-    .row{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0}
-    .card{background:#141b33;border:1px solid #273156;border-radius:12px;padding:14px;min-width:280px;flex:1}
-    .gpu{padding:8px 0;border-top:1px solid #273156}
-    .ok{color:#7ce38b}.warn{color:#ffd166}.bad{color:#ff6b6b}
-    button{background:#2f5dff;color:#fff;border:0;border-radius:8px;padding:8px 12px;cursor:pointer}
-    code{background:#1a2240;padding:2px 6px;border-radius:6px}
+    :root{
+      --bg:#070b16; --panel:#111a31cc; --line:#2a3c6a; --text:#eaf0ff; --muted:#9fb2dd;
+      --ok:#63e6be; --warn:#ffd166; --bad:#ff6b6b; --accent:#6ea8ff;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; min-height:100vh; color:var(--text);
+      font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+      background:radial-gradient(1200px 700px at 20% -10%, #1a2d58 0%, transparent 60%), var(--bg);
+      padding:20px;
+    }
+    .wrap{max-width:1200px;margin:0 auto}
+    .top{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+    h1{margin:0;font-size:28px;letter-spacing:.2px}
+    .muted{color:var(--muted)}
+    .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+    button{
+      background:linear-gradient(180deg,#4a86ff,#2f5dff);color:white;border:0;border-radius:10px;
+      padding:9px 13px;font-weight:600;cursor:pointer;box-shadow:0 6px 20px #2447a766;
+    }
+    code{background:#1a2648;border:1px solid #324a82;padding:2px 8px;border-radius:7px;color:#cfe0ff}
+    .status{margin:14px 0}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+    .card{
+      background:var(--panel);backdrop-filter: blur(8px);
+      border:1px solid var(--line); border-radius:14px; padding:14px;
+      box-shadow:0 8px 28px #00000033;
+    }
+    .card h3{margin:0 0 6px;font-size:18px}
+    .gpu{padding:10px 0;border-top:1px solid #2b3a62}
+    .title{display:flex;justify-content:space-between;gap:10px;align-items:center}
+    .badge{font-size:12px;padding:3px 8px;border-radius:999px;border:1px solid #38518e;color:#c7d8ff}
+    .bar{height:8px;background:#172447;border:1px solid #2f467f;border-radius:999px;overflow:hidden;margin-top:6px}
+    .fill{height:100%;background:linear-gradient(90deg,#39d98a,#f7c948,#ff6b6b)}
+    .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
   </style>
 </head>
 <body>
-  <h1>iREMB GPU Dashboard</h1>
-  <div class="muted">노드 2개(iREMB-C-03, iREMB-C-07) 상태를 표시합니다.</div>
-  <div class="row">
-    <button onclick="loadAll()">새로고침</button>
-    <div class="muted">API Base: <code id="apiBase"></code></div>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1>iREMB GPU Dashboard</h1>
+        <div class="muted">노드 2개(iREMB-C-03, iREMB-C-07) 실시간 모니터링</div>
+      </div>
+      <div class="badge">Auto refresh: 0.1s</div>
+    </div>
+
+    <div class="toolbar">
+      <button onclick="loadAll()">새로고침</button>
+      <div class="muted">API Base: <code id="apiBase"></code></div>
+    </div>
+
+    <div id="status" class="status muted">로딩 대기...</div>
+    <div class="grid" id="cards"></div>
   </div>
-  <div id="status" class="muted">로딩 대기...</div>
-  <div class="row" id="cards"></div>
 
 <script>
 const API_BASE = localStorage.getItem('gpu_api_base') || 'https://office-most-cartridge-broker.trycloudflare.com';
@@ -39,12 +75,18 @@ async function fetchNode(node){
 }
 
 function renderNode(node,data){
-  const list = (data.gpus||[]).map(g=>`
-    <div class="gpu">
-      <div><b>GPU ${g.index}</b> - ${g.name||'unknown'}</div>
-      <div class="${usageClass(Number(g.util||0))}">Util: ${g.util||0}%</div>
-      <div>Mem: ${g.mem_used||0} / ${g.mem_total||0} MiB</div>
-    </div>`).join('');
+  const list = (data.gpus||[]).map(g=>{
+    const util = Number(g.util||0);
+    return `
+      <div class="gpu">
+        <div class="title">
+          <div><b>GPU ${g.index}</b> - ${g.name||'unknown'}</div>
+          <div class="${usageClass(util)}"><b>${util}%</b></div>
+        </div>
+        <div class="bar"><div class="fill" style="width:${Math.max(0,Math.min(100,util))}%"></div></div>
+        <div class="muted">Memory: ${g.mem_used||0} / ${g.mem_total||0} MiB</div>
+      </div>`;
+  }).join('');
   return `<div class="card"><h3>${node}</h3><div class="muted">updated: ${new Date().toLocaleTimeString()}</div>${list||'<div class="muted">GPU 정보 없음</div>'}</div>`;
 }
 
@@ -65,7 +107,7 @@ async function loadAll(){
 }
 
 loadAll();
-setInterval(loadAll, 10000);
+setInterval(loadAll, 100);
 </script>
 </body>
 </html>
