@@ -10,7 +10,16 @@
 ## API 실행
 ```bash
 pip install fastapi uvicorn
-uvicorn tools.gpu_api:app --host 0.0.0.0 --port 8088
+python tools/gpu_api.py
+# 또는
+python -m uvicorn tools.gpu_api:app --host 0.0.0.0 --port 8088
+```
+
+체크:
+```bash
+curl http://127.0.0.1:8088/health
+curl "http://127.0.0.1:8088/metrics?node=iREMB-C-03"
+curl "http://127.0.0.1:8088/metrics/all"
 ```
 
 ## 대시보드
