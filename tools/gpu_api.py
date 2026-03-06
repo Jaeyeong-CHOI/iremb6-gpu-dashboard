@@ -7,7 +7,7 @@ from collections import defaultdict, deque
 DEFAULT_NODES = ["iREMB-C-03", "iREMB-C-07"]
 SAMPLE_SEC = 0.5
 WINDOW_SEC = 60
-MAX_POINTS = int(WINDOW_SEC / SAMPLE_SEC)
+MAX_POINTS = 512  # safety cap; real window is enforced by timestamp pruning
 
 app = FastAPI(title="iREMB GPU API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -51,13 +51,17 @@ def sampler_loop():
                 data = collect_node(node)
                 with LOCK:
                     for g in data.get("gpus", []):
-                        HISTORY[node][g["index"]].append({
+                        dq = HISTORY[node][g["index"]]
+                        dq.append({
                             "ts": now,
                             "util": g["util"],
                             "mem_used": g["mem_used"],
                             "mem_total": g["mem_total"],
                             "name": g["name"],
                         })
+                        cutoff = now - WINDOW_SEC
+                        while dq and dq[0]["ts"] < cutoff:
+                            dq.popleft()
             except Exception:
                 # Keep running even if one node temporarily fails.
                 pass
