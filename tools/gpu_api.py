@@ -6,7 +6,7 @@ from collections import defaultdict, deque
 
 DEFAULT_NODES = ["iREMB-C-03", "iREMB-C-07"]
 SAMPLE_SEC = 0.5
-WINDOW_SEC = 60
+WINDOW_SEC = 20
 MAX_POINTS = 512  # safety cap; real window is enforced by timestamp pruning
 
 app = FastAPI(title="iREMB GPU API")
