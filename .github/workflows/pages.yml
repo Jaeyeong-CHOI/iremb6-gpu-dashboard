@@ -26,6 +26,8 @@ jobs:
         run: |
           mkdir -p site
           cp -r docs/* site/
+          if [ -f index.html ]; then cp index.html site/index.html; fi
+          if [ -f CNAME ]; then cp CNAME site/CNAME; fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
